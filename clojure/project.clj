@@ -1,6 +1,6 @@
 (defproject websockify "1.0.0-SNAPSHOT"
   :description "Clojure implementation of Websockify"
-  :url "https://github.com/kanaka/websockify"
+  :url "https://github.com/novnc/websockify-other"
   :dependencies [[org.clojure/clojure "1.2.1"]
                  [org.clojure/tools.cli "0.2.1"]
                  [ring/ring-jetty-adapter "1.0.0-beta2"]
