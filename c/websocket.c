@@ -734,7 +734,6 @@ ws_ctx_t *do_handshake(int sock) {
     response_protocol = strtok(headers->protocols, ",");
     if (!response_protocol || !strlen(response_protocol)) {
         ws_ctx->opcode = OPCODE_BINARY;
-        response_protocol = "null";
     } else if (!strcmp(response_protocol, "base64")) {
       ws_ctx->opcode = OPCODE_TEXT;
     } else {
@@ -744,7 +743,13 @@ ws_ctx_t *do_handshake(int sock) {
     if (ws_ctx->hybi > 0) {
         handler_msg("using protocol HyBi/IETF 6455 %d\n", ws_ctx->hybi);
         gen_sha1(headers, sha1);
-        snprintf(response, sizeof(response), SERVER_HANDSHAKE_HYBI, sha1, response_protocol);
+        if (!response_protocol) {
+            snprintf(response, sizeof(response), SERVER_HANDSHAKE_HYBI, sha1, "");
+        } else {
+            char rsp_proto[512];
+            snprintf(rsp_proto, sizeof(rsp_proto), "Sec-WebSocket-Protocol: %s\r\n", response_protocol);
+            snprintf(response, sizeof(response), SERVER_HANDSHAKE_HYBI, sha1, rsp_proto);
+        }
     } else {
         if (ws_ctx->hixie == 76) {
             handler_msg("using protocol Hixie 76\n");
