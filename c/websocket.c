@@ -563,11 +563,14 @@ int parse_handshake(ws_ctx_t *ws_ctx, char *handshake) {
         headers->connection[end-start] = '\0';
    
         start = strstr(handshake, "\r\nSec-WebSocket-Protocol: ");
-        if (!start) { return 0; }
-        start += 26;
-        end = strstr(start, "\r\n");
-        strncpy(headers->protocols, start, end-start);
-        headers->protocols[end-start] = '\0';
+        if (start) {
+            start += 26;
+            end = strstr(start, "\r\n");
+            strncpy(headers->protocols, start, end-start);
+            headers->protocols[end-start] = '\0';
+        } else {
+            headers->protocols[0] = '\0';
+        }
     } else {
         // Hixie 75 or 76
         ws_ctx->hybi = 0;
@@ -659,6 +662,8 @@ ws_ctx_t *do_handshake(int sock) {
     int len, ret, i, offset;
     ws_ctx_t * ws_ctx;
     char *response_protocol;
+    const char *response_protocol_header = "Sec-WebSocket-Protocol: ";
+    const char *response_protocol_crlf = "\r\n";
 
     // Peek, but don't read the data
     len = recv(sock, handshake, 1024, MSG_PEEK);
@@ -729,20 +734,29 @@ ws_ctx_t *do_handshake(int sock) {
 
     headers = ws_ctx->headers;
 
-    response_protocol = strtok(headers->protocols, ",");
-    if (!response_protocol || !strlen(response_protocol)) {
+    if (headers->protocols == NULL || headers->protocols[0] == 0) {
         ws_ctx->opcode = OPCODE_BINARY;
-        response_protocol = "null";
-    } else if (!strcmp(response_protocol, "base64")) {
-      ws_ctx->opcode = OPCODE_TEXT;
+        response_protocol_header = "";
+        response_protocol = "";
+        response_protocol_crlf = "";
     } else {
-        ws_ctx->opcode = OPCODE_BINARY;
+        response_protocol = strtok(headers->protocols, ",");
+        if (!response_protocol || !strlen(response_protocol)) {
+            ws_ctx->opcode = OPCODE_BINARY;
+            response_protocol = "null";
+        } else if (!strcmp(response_protocol, "base64")) {
+            ws_ctx->opcode = OPCODE_TEXT;
+        } else {
+            ws_ctx->opcode = OPCODE_BINARY;
+        }
     }
 
     if (ws_ctx->hybi > 0) {
         handler_msg("using protocol HyBi/IETF 6455 %d\n", ws_ctx->hybi);
         gen_sha1(headers, sha1);
-        snprintf(response, sizeof(response), SERVER_HANDSHAKE_HYBI, sha1, response_protocol);
+        snprintf(response, sizeof(response), SERVER_HANDSHAKE_HYBI,
+                 sha1, response_protocol_header, response_protocol,
+                 response_protocol_crlf);
     } else {
         if (ws_ctx->hixie == 76) {
             handler_msg("using protocol Hixie 76\n");
