@@ -382,7 +382,7 @@ int main(int argc, char *argv[])
     //printf("  cert: %s\n",      settings.cert);
     //printf("  key: %s\n",       settings.key);
 
-    settings.handler = proxy_handler; 
+    settings.handler = proxy_handler;
     start_server();
 
 }

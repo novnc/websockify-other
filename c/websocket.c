@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
-#include <sys/types.h> 
+#include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <netinet/in.h>
@@ -55,28 +55,28 @@ void fatal(char *msg)
     exit(1);
 }
 
-/* resolve host with also IP address parsing */ 
-int resolve_host(struct in_addr *sin_addr, const char *hostname) 
-{ 
-    if (!inet_aton(hostname, sin_addr)) { 
-        struct addrinfo *ai, *cur; 
-        struct addrinfo hints; 
-        memset(&hints, 0, sizeof(hints)); 
-        hints.ai_family = AF_INET; 
-        if (getaddrinfo(hostname, NULL, &hints, &ai)) 
-            return -1; 
-        for (cur = ai; cur; cur = cur->ai_next) { 
-            if (cur->ai_family == AF_INET) { 
-                *sin_addr = ((struct sockaddr_in *)cur->ai_addr)->sin_addr; 
-                freeaddrinfo(ai); 
-                return 0; 
-            } 
-        } 
-        freeaddrinfo(ai); 
-        return -1; 
-    } 
-    return 0; 
-} 
+/* resolve host with also IP address parsing */
+int resolve_host(struct in_addr *sin_addr, const char *hostname)
+{
+    if (!inet_aton(hostname, sin_addr)) {
+        struct addrinfo *ai, *cur;
+        struct addrinfo hints;
+        memset(&hints, 0, sizeof(hints));
+        hints.ai_family = AF_INET;
+        if (getaddrinfo(hostname, NULL, &hints, &ai))
+            return -1;
+        for (cur = ai; cur; cur = cur->ai_next) {
+            if (cur->ai_family == AF_INET) {
+                *sin_addr = ((struct sockaddr_in *)cur->ai_addr)->sin_addr;
+                freeaddrinfo(ai);
+                return 0;
+            }
+        }
+        freeaddrinfo(ai);
+        return -1;
+    }
+    return 0;
+}
 
 
 /*
@@ -303,7 +303,7 @@ int decode_hixie(char *src, size_t srclength,
     *left = srclength;
 
     if (srclength == 2 &&
-        (src[0] == '\xff') && 
+        (src[0] == '\xff') &&
         (src[1] == '\x00')) {
         // client sent orderly close frame
         *opcode = 0x8; // Close frame
@@ -321,7 +321,7 @@ int decode_hixie(char *src, size_t srclength,
             return len;
         }
         retlen += len;
-        start = end + 2; // Skip '\xff' end and '\x00' start 
+        start = end + 2; // Skip '\xff' end and '\x00' start
         framecount++;
     } while (end < (src+srclength-1));
     if (framecount > 1) {
@@ -394,7 +394,7 @@ int decode_hybi(unsigned char *src, size_t srclength,
     int i = 0, len, framecount = 0;
     size_t remaining;
     unsigned int target_offset = 0, hdr_length = 0, payload_length = 0;
-    
+
     *left = srclength;
     frame = src;
 
@@ -494,7 +494,7 @@ int decode_hybi(unsigned char *src, size_t srclength,
         snprintf(cntstr, 3, "%d", framecount);
         traffic(cntstr);
     }
-    
+
     *left = remaining;
     return target_offset;
 }
@@ -508,7 +508,7 @@ int parse_handshake(ws_ctx_t *ws_ctx, char *handshake) {
     headers->key1[0] = '\0';
     headers->key2[0] = '\0';
     headers->key3[0] = '\0';
-    
+
     if ((strlen(handshake) < 92) || (bcmp(handshake, "GET ", 4) != 0)) {
         return 0;
     }
@@ -537,7 +537,7 @@ int parse_handshake(ws_ctx_t *ws_ctx, char *handshake) {
     end = strstr(start, "\r\n");
     strncpy(headers->origin, start, end-start);
     headers->origin[end-start] = '\0';
-   
+
     start = strstr(handshake, "\r\nSec-WebSocket-Version: ");
     if (start) {
         // HyBi/RFC 6455
@@ -554,14 +554,14 @@ int parse_handshake(ws_ctx_t *ws_ctx, char *handshake) {
         end = strstr(start, "\r\n");
         strncpy(headers->key1, start, end-start);
         headers->key1[end-start] = '\0';
-   
+
         start = strstr(handshake, "\r\nConnection: ");
         if (!start) { return 0; }
         start += 14;
         end = strstr(start, "\r\n");
         strncpy(headers->connection, start, end-start);
         headers->connection[end-start] = '\0';
-   
+
         start = strstr(handshake, "\r\nSec-WebSocket-Protocol: ");
         if (start) {
             start += 26;
@@ -589,7 +589,7 @@ int parse_handshake(ws_ctx_t *ws_ctx, char *handshake) {
             end = strstr(start, "\r\n");
             strncpy(headers->key1, start, end-start);
             headers->key1[end-start] = '\0';
-        
+
             start = strstr(handshake, "\r\nSec-WebSocket-Key2: ");
             if (!start) { return 0; }
             start += 22;
@@ -770,7 +770,7 @@ ws_ctx_t *do_handshake(int sock) {
         snprintf(response, sizeof(response), SERVER_HANDSHAKE_HIXIE, pre, headers->origin,
                  pre, scheme, headers->host, headers->path, pre, "base64", trailer);
     }
-    
+
     //handler_msg("response: %s\n", response);
     ws_send(ws_ctx, response, strlen(response));
 
@@ -866,8 +866,8 @@ void start_server() {
         clilen = sizeof(cli_addr);
         pipe_error = 0;
         pid = 0;
-        csock = accept(lsock, 
-                       (struct sockaddr *) &cli_addr, 
+        csock = accept(lsock,
+                       (struct sockaddr *) &cli_addr,
                        &clilen);
         if (csock < 0) {
             error("ERROR on accept");
