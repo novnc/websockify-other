@@ -529,14 +529,10 @@ int parse_handshake(ws_ctx_t *ws_ctx, char *handshake) {
     start = strstr(handshake, "\r\nOrigin: ");
     if (start) {
         start += 10;
-    } else {
-        start = strstr(handshake, "\r\nSec-WebSocket-Origin: ");
-        if (!start) { return 0; }
-        start += 24;
+        end = strstr(start, "\r\n");
+        strncpy(headers->origin, start, end-start);
+        headers->origin[end-start] = '\0';
     }
-    end = strstr(start, "\r\n");
-    strncpy(headers->origin, start, end-start);
-    headers->origin[end-start] = '\0';
 
     start = strstr(handshake, "\r\nSec-WebSocket-Version: ");
     if (start) {
