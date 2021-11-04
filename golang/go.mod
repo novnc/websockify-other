@@ -1,4 +1,4 @@
-module github.com/yjdwbj/websockify-other/websockify
+module github.com/novnc/websockify-other/websockify
 
 go 1.16
 
