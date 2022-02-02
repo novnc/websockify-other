@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -24,7 +25,7 @@ var (
 func init() {
 	path, err := os.Getwd()
 	if err != nil {
-		log.Println(err)
+		log.Printf("Could net get current working directory: %s", err)
 	}
 	source_addr = flag.String("l", "127.0.0.1:8080", "http service address")
 	target_addr = flag.String("t", "127.0.0.1:5900", "vnc service address")
@@ -46,11 +47,11 @@ func forwardtcp(wsconn *websocket.Conn, conn net.Conn) {
 	for {
 		n, err := conn.Read(tcpbuffer[0:])
 		if err != nil {
-			log.Println("TCP Read failed")
+			log.Printf("%s: reading from TCP failed: %s", time.Now().Format(time.Stamp), err)
 			return
 		} else {
 			if err := wsconn.WriteMessage(websocket.BinaryMessage, tcpbuffer[0:n]); err != nil {
-				log.Println(err)
+				log.Printf("%s: writing to WS failed: %s", time.Now().Format(time.Stamp), err)
 			}
 		}
 	}
@@ -62,14 +63,14 @@ func forwardweb(wsconn *websocket.Conn, conn net.Conn) {
 	for {
 		defer func() {
 			if err := recover(); err != nil {
-				log.Println("Reading from websocket failed")
+				log.Printf("%s: reading from WS failed: %s", time.Now().Format(time.Stamp), err)
 				return
 			}
 		}()
 		_, buffer, err := wsconn.ReadMessage()
 		if err == nil {
 			if _, err := conn.Write(buffer); err != nil {
-				log.Println("tcp write: ", err)
+				log.Printf("%s: writing to TCP failed: %s", time.Now().Format(time.Stamp), err)
 			}
 		}
 	}
@@ -78,7 +79,7 @@ func forwardweb(wsconn *websocket.Conn, conn net.Conn) {
 func serveWs(w http.ResponseWriter, r *http.Request) {
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Println("upgrade:", err)
+		log.Printf("%s: failed to upgrade to WS: %s", time.Now().Format(time.Stamp), err)
 		return
 	}
 	vnc, err := net.Dial("tcp", *target_addr)
