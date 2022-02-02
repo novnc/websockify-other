@@ -88,7 +88,9 @@ func main() {
 		log.Println(err)
 	}
 
-	http.Handle("/", http.FileServer(http.Dir(path+"/"+*web)))
+	if *web != path {
+		http.Handle("/", http.FileServer(http.Dir(*web)))
+	}
 	http.HandleFunc("/websockify", serveWs)
 	log.Fatal(http.ListenAndServe(*source_addr, nil))
 }
