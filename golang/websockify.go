@@ -47,6 +47,7 @@ func forwardtcp(wsconn *websocket.Conn, conn net.Conn) {
 		n, err := conn.Read(tcpbuffer[0:])
 		if err != nil {
 			log.Println("TCP Read failed")
+			return
 		} else {
 			if err := wsconn.WriteMessage(websocket.BinaryMessage, tcpbuffer[0:n]); err != nil {
 				log.Println(err)
@@ -59,6 +60,12 @@ func forwardweb(wsconn *websocket.Conn, conn net.Conn) {
 	defer wsconn.Close()
 	defer conn.Close()
 	for {
+		defer func() {
+			if err := recover(); err != nil {
+				log.Println("Reading from websocket failed")
+				return
+			}
+		}()
 		_, buffer, err := wsconn.ReadMessage()
 		if err == nil {
 			if _, err := conn.Write(buffer); err != nil {
