@@ -97,8 +97,10 @@ func main() {
 	}
 
 	if *web != path {
+		log.Printf("Serving %s at %s", *web, *sourceAddr)
 		http.Handle("/", http.FileServer(http.Dir(*web)))
 	}
+	log.Printf("Serving WS of %s at %s", *targetAddr, *sourceAddr)
 	http.HandleFunc("/websockify", serveWs)
 	log.Fatal(http.ListenAndServe(*sourceAddr, nil))
 }
