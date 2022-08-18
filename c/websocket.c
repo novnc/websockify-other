@@ -156,8 +156,11 @@ ws_ctx_t *ws_socket_ssl(ws_ctx_t *ctx, int socket, char * certfile, char * keyfi
         ssl_initialized = 1;
 
     }
-
-    ctx->ssl_ctx = SSL_CTX_new(TLS_server_method());
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
+    ctx->ssl_ctx = SSL_CTX_new(SSLv23_server_method ());
+#else
+    ctx->ssl_ctx = SSL_CTX_new(TLS_server_method  ());
+#endif
     if (ctx->ssl_ctx == NULL) {
         ERR_print_errors_fp(stderr);
         fatal("Failed to configure SSL context");
