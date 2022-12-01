@@ -7,6 +7,7 @@ package main
 
 import (
 	"flag"
+	"io/fs"
 	"log"
 	"net"
 	"net/http"
@@ -108,6 +109,28 @@ func serveWs(w http.ResponseWriter, r *http.Request) {
 	go forwardWeb(ws, vnc)
 }
 
+type fsWithoutDirListing struct {
+	http.FileSystem
+}
+
+func (nfs fsWithoutDirListing) Open(path string) (http.File, error) {
+	f, err := nfs.FileSystem.Open(path)
+	if err != nil {
+		return nil, err
+	}
+
+	s, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if s.IsDir() {
+		f.Close()
+		return nil, fs.ErrPermission
+	}
+
+	return f, nil
+}
+
 func main() {
 	flag.Parse()
 	log.SetFlags(0)
@@ -118,7 +141,7 @@ func main() {
 
 	if *web != path {
 		log.Printf("Serving %s at %s", *web, *sourceAddr)
-		http.Handle("/", http.FileServer(http.Dir(*web)))
+		http.Handle("/", http.FileServer(fsWithoutDirListing{http.Dir(*web)}))
 	}
 	log.Printf("Serving WS of %s at %s", *targetAddr, *sourceAddr)
 	http.HandleFunc("/websockify", serveWs)
