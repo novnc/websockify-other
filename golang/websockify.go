@@ -32,14 +32,6 @@ func init() {
 	web = flag.String("web", path, "web root folder")
 }
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
-}
-
 func forwardTcp(wsConn *websocket.Conn, conn net.Conn) {
 	var tcpBuffer [1024]byte
 	defer func() {
@@ -56,12 +48,12 @@ func forwardTcp(wsConn *websocket.Conn, conn net.Conn) {
 		}
 		n, err := conn.Read(tcpBuffer[0:])
 		if err != nil {
-			log.Printf("%s: reading from TCP failed: %s", time.Now().Format(time.Stamp), err)
+			log.Printf("%s: TCP.Read() failed: %s", time.Now().Format(time.Stamp), err)
 			return
-		} else {
-			if err := wsConn.WriteMessage(websocket.BinaryMessage, tcpBuffer[0:n]); err != nil {
-				log.Printf("%s: writing to WS failed: %s", time.Now().Format(time.Stamp), err)
-			}
+		}
+		if err := wsConn.WriteMessage(websocket.BinaryMessage, tcpBuffer[0:n]); err != nil {
+			log.Printf("%s: websocket.WriteMessage() failed: %s", time.Now().Format(time.Stamp), err)
+			return
 		}
 	}
 }
@@ -69,7 +61,7 @@ func forwardTcp(wsConn *websocket.Conn, conn net.Conn) {
 func forwardWeb(wsConn *websocket.Conn, conn net.Conn) {
 	defer func() {
 		if err := recover(); err != nil {
-			log.Printf("%s: reading from WS failed: %s", time.Now().Format(time.Stamp), err)
+			log.Printf("%s: websocket forwarding side panic: %s", time.Now().Format(time.Stamp), err)
 		}
 		if conn != nil {
 			conn.Close()
@@ -84,15 +76,26 @@ func forwardWeb(wsConn *websocket.Conn, conn net.Conn) {
 		}
 
 		_, buffer, err := wsConn.ReadMessage()
-		if err == nil {
-			if _, err := conn.Write(buffer); err != nil {
-				log.Printf("%s: writing to TCP failed: %s", time.Now().Format(time.Stamp), err)
-			}
+		if err != nil {
+			log.Printf("%s: websocket.ReadMessage() failed: %s", time.Now().Format(time.Stamp), err)
+			return
+		}
+		if _, err := conn.Write(buffer); err != nil {
+			log.Printf("%s: tcp.Write() failed: %s", time.Now().Format(time.Stamp), err)
+			return
 		}
 	}
 }
 
 func serveWs(w http.ResponseWriter, r *http.Request) {
+	upgrader := websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+		Subprotocols: websocket.Subprotocols(r),
+	}
 	ws, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("%s: failed to upgrade to WS: %s", time.Now().Format(time.Stamp), err)
