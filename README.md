@@ -3,7 +3,7 @@
 This directory contain various implementations of
 WebSockets-to-TCP-Socket proxies. These are not as complete as the
 primary [Python](https://github.com/novnc/websockify) and
-[JavaScript](https://github.com/novnc/websockify) projects, but should
+[JavaScript](https://github.com/novnc/websockify-js) projects, but should
 still be usable.
 
 ### News/help/contact
