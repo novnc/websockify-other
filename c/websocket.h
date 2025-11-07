@@ -57,6 +57,7 @@ typedef struct {
 
 typedef struct {
     int verbose;
+    int veryverbose;
     char listen_host[256];
     int listen_port;
     void (*handler)(ws_ctx_t*);

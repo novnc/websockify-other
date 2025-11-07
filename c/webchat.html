@@ -1,0 +1,79 @@
+ 
+  <head>
+    <title>WebSocket client test</title>
+  </head>
+
+  <body>
+    <h1>WebSocket Client Test</h1>
+    <div id="log"></div>
+  </body>
+
+<script language="javascript" type="text/javascript">
+
+    var wsUri = "wss://boardspace.net:12346/chat"; //"ws:/localhost:8887";
+    var log;
+     //websocket.close();
+      //websocket.close();
+
+    const sleep = (delay) => new Promise((resolve) => setTimeout(resolve, delay));
+  
+    function init()
+    {
+      log = document.getElementById("log");
+      testWebSocket();
+      
+    }
+
+    function testWebSocket()
+    {
+      websocket = new WebSocket(wsUri);
+      websocket.onopen    = function(evt) { onOpen(evt)    };
+      websocket.onclose   = function(evt) { onClose(evt)   };
+      websocket.onmessage = function(evt) { onMessage(evt) };
+      websocket.onerror   = function(evt) { onError(evt)   };
+    }
+
+    async function onOpen(evt)
+    {
+      writeLog("CONNECTED");
+      sendMessage("Hello world\n");
+      await sleep(5000);
+      sendMessage("test line 1\n");
+      await sleep(5000)
+      sendMessage("test line 2\n");
+      await sleep(5000);
+      websocket.close();
+    }
+
+    function onClose(evt)
+    {
+      writeLog("Websocket DISCONNECTED");
+    }
+
+    function onMessage(evt)
+    {
+      writeLog('<span style="color: blue;">RESPONSE: ' + evt.data+'</span>');
+    }
+
+    function onError(evt)
+    {
+      writeLog('<span style="color: red;">ERROR:</span> ' + evt.data);
+    }
+
+    function sendMessage(message)
+    {
+      writeLog("SENT: " + message);
+      websocket.send(message);
+    }
+
+    function writeLog(message)
+    {
+      var pre = document.createElement("p");
+      pre.innerHTML = message;
+      log.appendChild(pre);
+    }
+
+    window.addEventListener("load", init, false);
+
+  </script>
+  

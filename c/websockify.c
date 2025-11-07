@@ -20,7 +20,6 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include "websocket.h"
-
 char traffic_legend[] = "\n\
 Traffic Legend:\n\
     }  - Client receive\n\
@@ -36,6 +35,7 @@ Traffic Legend:\n\
 char USAGE[] = "Usage: [options] " \
                "[source_addr:]source_port target_addr:target_port\n\n" \
                "  --verbose|-v       verbose messages and per frame traffic\n" \
+               "  --veryverbose|-V       very verbose messages and per frame traffic\n" \
                "  --daemon|-D        become a daemon (background process)\n" \
                "  --run-once         handle a single WebSocket connection and exit\n" \
                "  --cert CERT        SSL certificate file\n" \
@@ -57,11 +57,12 @@ void do_proxy(ws_ctx_t *ws_ctx, int target) {
     fd_set rlist, wlist, elist;
     struct timeval tv;
     int i, maxfd, client = ws_ctx->sockfd;
-    unsigned int opcode, left, ret;
+    unsigned int left, ret;
     unsigned int tout_start, tout_end, cout_start, cout_end;
     unsigned int tin_start, tin_end;
     ssize_t len, bytes;
-
+    unsigned int opcode = ws_ctx->opcode;
+    if(settings.veryverbose) { printf("proxy opcode %d",opcode); }
     tout_start = tout_end = cout_start = cout_end;
     tin_start = tin_end = 0;
     maxfd = client > target ? client+1 : target+1;
@@ -115,6 +116,12 @@ void do_proxy(ws_ctx_t *ws_ctx, int target) {
         if (FD_ISSET(target, &wlist)) {
             len = tout_end-tout_start;
             bytes = send(target, ws_ctx->tout_buf + tout_start, len, 0);
+	    if(settings.verbose)
+	      { char ch = *(ws_ctx->tout_buf + tout_start + len);
+	        *(ws_ctx->tout_buf + tout_start + len) = 0;
+	        printf("send target: %s\n", ws_ctx->tout_buf + tout_start); 
+		*(ws_ctx->tout_buf + tout_start + len) = ch;
+	      }
             if (pipe_error) { break; }
             if (bytes < 0) {
                 handler_emsg("target connection error: %s\n",
@@ -132,7 +139,8 @@ void do_proxy(ws_ctx_t *ws_ctx, int target) {
 
         if (FD_ISSET(client, &wlist)) {
             len = cout_end-cout_start;
-            bytes = ws_send(ws_ctx, ws_ctx->cout_buf + cout_start, len);
+            bytes = ws_send(
+ws_ctx, ws_ctx->cout_buf + cout_start, len);
             if (pipe_error) { break; }
             if (len < 3) {
                 handler_emsg("len: %d, bytes: %d: %d\n",
@@ -140,6 +148,10 @@ void do_proxy(ws_ctx_t *ws_ctx, int target) {
                              (int) *(ws_ctx->cout_buf + cout_start));
             }
             cout_start += bytes;
+	    if(settings.veryverbose)
+	      {
+		printf("sent %d\n",bytes);
+	      }
             if (cout_start >= cout_end) {
                 cout_start = cout_end = 0;
                 traffic("<");
@@ -156,20 +168,27 @@ void do_proxy(ws_ctx_t *ws_ctx, int target) {
                 break;
             }
             cout_start = 0;
+	    if(settings.veryverbose) { printf("received %d from target\n",bytes); }
+	    ws_ctx->cin_buf[bytes]=(char)0;
+	    if(settings.verbose) { printf("echo: %s\n",ws_ctx->cin_buf); }
+
             if (ws_ctx->hybi) {
+	      if(settings.veryverbose) { printf("encode hybi\n"); }
                 cout_end = encode_hybi(ws_ctx->cin_buf, bytes,
-                                   ws_ctx->cout_buf, BUFSIZE, ws_ctx->opcode);
+                                   ws_ctx->cout_buf, BUFSIZE, opcode);
             } else {
+		if(settings.veryverbose) { printf("encode hixie\n"); }
                 cout_end = encode_hixie(ws_ctx->cin_buf, bytes,
                                     ws_ctx->cout_buf, BUFSIZE);
             }
-            /*
-            printf("encoded: ");
+	    if(settings.veryverbose)
+	      {
+		printf("encoded: "); 
             for (i=0; i< cout_end; i++) {
                 printf("%u,", (unsigned char) *(ws_ctx->cout_buf+i));
             }
             printf("\n");
-            */
+	      }
             if (cout_end < 0) {
                 handler_emsg("encoding error\n");
                 break;
@@ -179,25 +198,31 @@ void do_proxy(ws_ctx_t *ws_ctx, int target) {
 
         if (FD_ISSET(client, &rlist)) {
             bytes = ws_recv(ws_ctx, ws_ctx->tin_buf + tin_end, BUFSIZE-1);
+	    if(settings.veryverbose) { printf("got %d bytes\n",bytes); }
             if (pipe_error) { break; }
             if (bytes <= 0) {
                 handler_emsg("client closed connection\n");
                 break;
             }
             tin_end += bytes;
-            /*
-            printf("before decode: ");
-            for (i=0; i< bytes; i++) {
-                printf("%u,", (unsigned char) *(ws_ctx->tin_buf+i));
-            }
-            printf("\n");
-            */
+
+	    if(settings.veryverbose)
+	      {
+		printf("before decode: ");
+		for (i=0; i< bytes; i++) {
+		  printf("%u,", (unsigned char) *(ws_ctx->tin_buf+i));
+		}
+		printf("\n");
+	      }
             if (ws_ctx->hybi) {
+	      if(settings.veryverbose) { printf("decode hybi %d\n",opcode); }
                 len = decode_hybi(ws_ctx->tin_buf + tin_start,
                                   tin_end-tin_start,
                                   ws_ctx->tout_buf, BUFSIZE-1,
                                   &opcode, &left);
+		if(settings.veryverbose) { printf("len %d op %d\n",len,opcode); }
             } else {
+	      if(settings.veryverbose) { printf("decode hixie\n"); }
                 len = decode_hixie(ws_ctx->tin_buf + tin_start,
                                    tin_end-tin_start,
                                    ws_ctx->tout_buf, BUFSIZE-1,
@@ -209,13 +234,14 @@ void do_proxy(ws_ctx_t *ws_ctx, int target) {
                 break;
             }
 
-            /*
+	    if(settings.veryverbose)
+	      {
             printf("decoded: ");
             for (i=0; i< len; i++) {
                 printf("%u,", (unsigned char) *(ws_ctx->tout_buf+i));
             }
             printf("\n");
-            */
+	      }
             if (len < 0) {
                 handler_emsg("decoding error\n");
                 break;
@@ -277,10 +303,11 @@ void proxy_handler(ws_ctx_t *ws_ctx) {
 int main(int argc, char *argv[])
 {
     int fd, c, option_index = 0;
-    static int ssl_only = 0, daemon = 0, run_once = 0, verbose = 0;
+    static int ssl_only = 0, daemon = 0, run_once = 0, verbose = 0,veryverbose = 0;
     char *found;
     static struct option long_options[] = {
         {"verbose",    no_argument,       &verbose,    'v'},
+        {"veryverbose",    no_argument,   &veryverbose,    'V'},
         {"ssl-only",   no_argument,       &ssl_only,    1 },
         {"daemon",     no_argument,       &daemon,     'D'},
         /* ---- */
@@ -298,12 +325,11 @@ int main(int argc, char *argv[])
     settings.key = "";
 
     while (1) {
-        c = getopt_long (argc, argv, "vDrc:k:",
+        c = getopt_long (argc, argv, "vVDrc:k:",
                          long_options, &option_index);
 
         /* Detect the end */
         if (c == -1) { break; }
-
         switch (c) {
             case 0:
                 break; // ignore
@@ -312,6 +338,9 @@ int main(int argc, char *argv[])
             case 'v':
                 verbose = 1;
                 break;
+	    case 'V':
+	      verbose = veryverbose = 1;
+	      break;
             case 'D':
                 daemon = 1;
                 break;
@@ -335,6 +364,7 @@ int main(int argc, char *argv[])
         }
     }
     settings.verbose      = verbose;
+    settings.veryverbose  = veryverbose;
     settings.ssl_only     = ssl_only;
     settings.daemon       = daemon;
     settings.run_once     = run_once;

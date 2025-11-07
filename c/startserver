@@ -1,0 +1,5 @@
+#!/bin/sh
+#
+# this script has to be executed as root to get access to the key files
+#
+./websockify -k /etc/letsencrypt/live/boardspace.net/privkey.pem -c /etc/letsencrypt/live/boardspace.net/cert.pem  boardspace.net:12345 boardspace.net:2255

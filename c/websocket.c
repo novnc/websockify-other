@@ -6,6 +6,7 @@
  * You can make a cert/key with openssl using:
  * openssl req -new -x509 -days 365 -nodes -out self.pem -keyout self.pem
  * as taken from http://docs.python.org/dev/library/ssl.html#certificates
+ *
  */
 #include <unistd.h>
 #include <stdio.h>
@@ -27,6 +28,53 @@
 #include <openssl/sha.h> /* sha1 hash */
 #include "websocket.h"
 
+//
+// this was TLS_server_method in the original, and that is recommended, except
+// it doesn't seem to exist in older versions of SSL
+// including this allows the project to link, but still more mystery
+// to be solved involing getting a signed certificate and self.pem
+#define TLS_SERVER_METHOD TLSv1_2_server_method
+
+
+// the other mystery is the "self.pem" needed to provide ssl keys.  Back in 
+// the day it was common to have openssl generate a self-signed certificate,
+// but that is no longer acceptable.
+// one apparently correct answer is to catenate the site private key and public key
+// as self.pem, but that has the undesirable effect of making a copy of rthe private
+// key.  A better solution is to use -k <private key> -c <public key> where the
+// beracketed items are the paths to the actual keys for the server, which are
+// typically found in /etc/letsencrypt/live
+//
+
+/*
+https://www.openmymind.net/WebSocket-Framing-Masking-Fragmentation-and-More/
+
+May 29, 2022
+
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-------+-+-------------+-------------------------------+
+|F|R|R|R| opcode|M| Payload len |    Extended payload length    |
+|I|S|S|S|  (4)  |A|     (7)     |             (16/64)           |
+|N|V|V|V|       |S|             |   (if payload len==126/127)   |
+| |1|2|3|       |K|             |                               |
++-+-+-+-+-------+-+-------------+ - - - - - - - - - - - - - - - +
+|     Extended payload length continued, if payload len == 127  |
++ - - - - - - - - - - - - - - - +-------------------------------+
+|                               |Masking-key, if MASK set to 1  |
++-------------------------------+-------------------------------+
+| Masking-key (continued)       |          Payload Data         |
++-------------------------------- - - - - - - - - - - - - - - - +
+:                     Payload Data continued ...                :
++ - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
+|                     Payload Data continued ...                |
++---------------------------------------------------------------+
+
+
+
+ */
+
+
 /*
  * Global state
  *
@@ -38,7 +86,7 @@ settings_t settings;
 
 
 void traffic(const char * token) {
-    if ((settings.verbose) && (! settings.daemon)) {
+    if ((settings.veryverbose) && (! settings.daemon)) {
         fprintf(stdout, "%s", token);
         fflush(stdout);
     }
@@ -157,7 +205,7 @@ ws_ctx_t *ws_socket_ssl(ws_ctx_t *ctx, int socket, char * certfile, char * keyfi
 
     }
 
-    ctx->ssl_ctx = SSL_CTX_new(TLS_server_method());
+    ctx->ssl_ctx = SSL_CTX_new(TLS_SERVER_METHOD());
     if (ctx->ssl_ctx == NULL) {
         ERR_print_errors_fp(stderr);
         fatal("Failed to configure SSL context");
@@ -207,6 +255,7 @@ void ws_socket_free(ws_ctx_t *ctx) {
         ctx->sockfd = 0;
     }
 }
+
 
 int ws_b64_ntop(const unsigned char const * src, size_t srclen, char * dst, size_t dstlen) {
     int len = 0;
@@ -274,6 +323,7 @@ int ws_b64_pton(const char const * src, unsigned char * dst, size_t dstlen) {
     return len;
 }
 
+
 /* ------------------------------------------------------- */
 
 
@@ -281,7 +331,11 @@ int encode_hixie(u_char const *src, size_t srclength,
                  char *target, size_t targsize) {
     int sz = 0, len = 0;
     target[sz++] = '\x00';
+#ifdef BASE64    
     len = ws_b64_ntop(src, srclength, target+sz, targsize-sz);
+#else
+    len = targsize-sz;
+#endif
     if (len < 0) {
         return len;
     }
@@ -349,12 +403,15 @@ int encode_hybi(u_char const *src, size_t srclength,
         return 0;
     }
 
+#ifdef BASE64
     if (opcode & OPCODE_TEXT) {
-        len = ((srclength - 1) / 3) * 4 + 4;
-    } else {
+    len = ((srclength - 1) / 3) * 4 + 4;
+    } else
+#endif
+      {
         len = srclength;
     }
-
+    if(settings.veryverbose) {printf("enc opcode %d len %d\n",opcode,len); }
     if (len <= 125) {
         target[1] = (char) len;
         payload_offset = 2;
@@ -370,9 +427,12 @@ int encode_hybi(u_char const *src, size_t srclength,
         //payload_offset = 10;
     }
 
+#if BASE64
     if (opcode & OPCODE_TEXT) {
         len = ws_b64_ntop(src, srclength, target+payload_offset, targsize-payload_offset);
-    } else {
+    } else 
+#endif
+{
         memcpy(target+payload_offset, src, srclength);
         len = srclength;
     }
@@ -430,6 +490,7 @@ int decode_hybi(unsigned char *src, size_t srclength,
         }
 
         payload_length = frame[1] & 0x7f;
+	if(settings.veryverbose) { printf("payload len = %d",payload_length);}
         if (payload_length < 126) {
             hdr_length = 2;
             //frame += 2 * sizeof(char);
@@ -445,6 +506,7 @@ int decode_hybi(unsigned char *src, size_t srclength,
         }
         //printf("    payload_length: %u, raw remaining: %u\n", payload_length, remaining);
         payload = frame + hdr_length + 4*masked;
+	if(settings.veryverbose) { printf(" opcode %d %s\n",*opcode,*opcode==OPCODE_TEXT?"text":"binary"); }
 
         if (*opcode != OPCODE_TEXT && *opcode != OPCODE_BINARY) {
             handler_msg("Ignoring non-data frame, opcode 0x%x\n", *opcode);
@@ -455,7 +517,6 @@ int decode_hybi(unsigned char *src, size_t srclength,
             handler_msg("Ignoring empty frame\n");
             continue;
         }
-
         if ((payload_length > 0) && (!masked)) {
             handler_emsg("Received unmasked payload from client\n");
             return -1;
@@ -471,10 +532,16 @@ int decode_hybi(unsigned char *src, size_t srclength,
             payload[i] ^= mask[i%4];
         }
 
-        if (*opcode & OPCODE_TEXT) {
-            // base64 decode the data
-            len = ws_b64_pton((const char*)payload, target+target_offset, targsize);
-        } else {
+#ifdef BASE64
+	if (*opcode == OPCODE_TEXT) {
+           // base64 decode the data
+	  if(settings.veryverbose) { printf("base64 decode\n"); }
+	  len = ws_b64_pton((const char*)payload, target+target_offset, targsize);
+        }
+	else 
+#endif
+	  { // binary
+	    if(settings.veryverbose) { printf("binary decode\n"); }
             memcpy(target+target_offset, payload, payload_length);
             len = payload_length;
         }
@@ -657,13 +724,19 @@ ws_ctx_t *do_handshake(int sock) {
     headers_t *headers;
     int len, ret, i, offset;
     ws_ctx_t * ws_ctx;
-    char *response_protocol;
+    char *response_protocol=NULL;
     const char *response_protocol_header = "Sec-WebSocket-Protocol: ";
     const char *response_protocol_crlf = "\r\n";
 
+    printf("doing handshake\n");
+
     // Peek, but don't read the data
     len = recv(sock, handshake, 1024, MSG_PEEK);
+
     handshake[len] = 0;
+
+    printf("in %s\n",handshake);
+
     if (len == 0) {
         handler_msg("ignoring empty handshake\n");
         return NULL;
@@ -732,15 +805,18 @@ ws_ctx_t *do_handshake(int sock) {
 
     if (headers->protocols == NULL || headers->protocols[0] == 0) {
         ws_ctx->opcode = OPCODE_BINARY;
+	if(settings.verbose) { printf("Opcode default set to binary %d\n",ws_ctx->opcode); }
         response_protocol_header = "";
         response_protocol = "";
         response_protocol_crlf = "";
     } else {
         response_protocol = strtok(headers->protocols, ",");
+	printf("response protocol %s\n",response_protocol);
         if (!response_protocol || !strlen(response_protocol)) {
             ws_ctx->opcode = OPCODE_BINARY;
             response_protocol = "null";
         } else if (!strcmp(response_protocol, "base64")) {
+	  printf("using base64 %s\n",response_protocol);
             ws_ctx->opcode = OPCODE_TEXT;
         } else {
             ws_ctx->opcode = OPCODE_BINARY;
